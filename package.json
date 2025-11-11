@@ -1,0 +1,124 @@
+{
+  "name": "nice-specs",
+  "displayName": "Nice Specs Chat",
+  "description": "Adds an @nicespecs participant to coding agent chats that streams answers via the user-selected model.",
+  "version": "0.0.1",
+  "publisher": "your-publisher-id",
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguageModel:chatParticipant",
+    "onCommand:nicespecs.runDocGeneration"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "nicespecs.runDocGeneration",
+        "title": "Nice Specs: Generate Documentation",
+        "category": "Nice Specs"
+      },
+      {
+        "command": "nicespecs.resumeDocGeneration",
+        "title": "Nice Specs: Resume Documentation Run",
+        "category": "Nice Specs"
+      },
+      {
+        "command": "nicespecs.cleanDocumentation",
+        "title": "Nice Specs: Delete Generated Documentation",
+        "category": "Nice Specs"
+      }
+    ],
+    "configuration": {
+      "title": "Nice Specs",
+      "properties": {
+        "nicespecs.ignoreGlobs": {
+          "type": "array",
+          "description": "Folder names to ignore during traversal.",
+          "default": [
+            "node_modules",
+            ".git",
+            "dist",
+            "out",
+            "build",
+            ".next",
+            ".nicespecs"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "nicespecs.chunkSizeTokens": {
+          "type": "number",
+          "default": 700,
+          "description": "Approximate chunk size in tokens for code excerpts."
+        },
+        "nicespecs.chunkOverlapTokens": {
+          "type": "number",
+          "default": 80,
+          "description": "Overlap between chunks to preserve context."
+        },
+        "nicespecs.tokenBudget": {
+          "type": "number",
+          "default": 200000,
+          "description": "Max tokens @nicespecs may spend per run."
+        },
+        "nicespecs.reviewerEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the reviewer persona to validate generated docs."
+        },
+        "nicespecs.maxFileSizeBytes": {
+          "type": "number",
+          "default": 2097152,
+          "description": "Maximum file size (in bytes) that @nicespecs will read when chunking."
+        },
+        "nicespecs.minChunkLines": {
+          "type": "number",
+          "default": 12,
+          "description": "Minimum number of lines per chunk before @nicespecs considers splitting."
+        },
+        "nicespecs.maxChunkLines": {
+          "type": "number",
+          "default": 120,
+          "description": "Maximum number of lines per chunk."
+        },
+        "nicespecs.signatureSampleLines": {
+          "type": "number",
+          "default": 120,
+          "description": "Number of lines from each file used to compute change signatures."
+        }
+      }
+    },
+    "chatParticipants": [
+      {
+        "id": "nicespecs",
+        "name": "nicespecs",
+        "description": "Route coding agent questions through the Nice Specs flow.",
+        "isSticky": true
+      }
+    ]
+  },
+  "enabledApiProposals": [
+    "languageModelChat"
+  ],
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "pretest": "npm run compile",
+    "test": "echo 'No tests yet'"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/vscode": "^1.86.0",
+    "@typescript-eslint/eslint-plugin": "^6.20.0",
+    "@typescript-eslint/parser": "^6.20.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  }
+}
