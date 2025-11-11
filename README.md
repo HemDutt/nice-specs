@@ -1,4 +1,4 @@
-# Nice Specs Chat
+# Nice Specs
 
 Nice Specs is a VS Code extension that adds a documentation-only participant (`@nicespecs`) to Copilot Chat, inline chat, and any other Language Model Chat surface. The participant streams answers with the same model you already selected in the chat pane, giving you deterministic documentation runs without juggling extra prompts.
 
