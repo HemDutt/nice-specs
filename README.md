@@ -1,4 +1,4 @@
-# Nice Specs Chat
+# Nice Specs
 
 Nice Specs is a VS Code extension that adds a documentation-only participant (`@nicespecs`) to Copilot Chat, inline chat, and any other Language Model Chat surface. The participant streams answers with the same model you already selected in the chat pane, giving you deterministic documentation runs without juggling extra prompts.
 
@@ -8,7 +8,7 @@ Nice Specs is a VS Code extension that adds a documentation-only participant (`@
 - **Deterministic pipeline** – BFS traversal, semantic chunking, persona orchestration, and reviewer checkpoints follow the canonical structure defined in `Design Strategy/documentation-strategy.md`.
 - **Incremental + resumable** – Signature scanning, git-aware change detection, and persisted checkpoints ensure only changed folders are regenerated and stalled runs pick up exactly where they left off.
 - **Local intelligence** – SQLite-backed embeddings and a symbol key map are stored under `.nicespecs`, enabling fast RAG queries in future tooling without sending code over the network.
-- **Cost visibility** – Token estimates, approvals, and actual spend are surfaced before and after every run.
+- **Cost visibility** – Uses user selected LLM models from code agent active in VS Code. Token estimates, approvals, and actual spend are surfaced before and after every run.
 
 ## Requirements
 
