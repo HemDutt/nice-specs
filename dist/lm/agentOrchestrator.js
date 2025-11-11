@@ -17,7 +17,7 @@ class AgentOrchestrator {
         this.synthesizer = new docSynthesisAgent_1.DocSynthesisAgent(this.personaClient);
         this.reviewer = new qualityReviewerAgent_1.QualityReviewerAgent(this.personaClient);
     }
-    async prepareLedger(folder, chunks, childSummaries, token, resumeState) {
+    async prepareLedger(folder, chunks, childSummaries, token, resumeState, progress, progressLabel) {
         if (resumeState && resumeState.facts.length) {
             return {
                 componentId: resumeState.componentId,
@@ -29,8 +29,17 @@ class AgentOrchestrator {
                 plan: resumeState.plan
             };
         }
+        if (progress && progressLabel) {
+            progress.report({ message: `${progressLabel} – Planning documentation` });
+        }
         const plan = await this.planner.plan(folder, childSummaries, token);
-        const facts = await this.analyst.analyze(chunks, token);
+        if (progress && progressLabel) {
+            progress.report({ message: `${progressLabel} – Analyzing code` });
+        }
+        const facts = await this.analyst.analyze(chunks, token, progress, progressLabel);
+        if (progress && progressLabel) {
+            progress.report({ message: `${progressLabel} – Finalizing ledger` });
+        }
         return {
             componentId: (0, path_1.componentIdFromUri)(folder.uri, this.config.workspaceRoot),
             folderPath: (0, path_1.workspaceRelativePath)(folder.uri),
@@ -41,14 +50,26 @@ class AgentOrchestrator {
             plan
         };
     }
-    async generateDraft(folder, ledger, token, constraints) {
+    async generateDraft(folder, ledger, token, constraints, progress, progressLabel) {
+        if (progress && progressLabel) {
+            progress.report({ message: `${progressLabel} – Synthesizing documentation` });
+        }
         let synthesis = await this.synthesizer.synthesize(folder, ledger, token, constraints);
         if (this.config.reviewerEnabled) {
+            if (progress && progressLabel) {
+                progress.report({ message: `${progressLabel} – Reviewing draft` });
+            }
             const reviewMarkdown = (0, docTemplate_1.renderDocumentation)(createMetadata(folder, ledger, synthesis.doc), synthesis.doc);
             const review = await this.reviewer.review(reviewMarkdown, ledger, token);
             if (review.status === 'rework') {
+                if (progress && progressLabel) {
+                    progress.report({ message: `${progressLabel} – Revising draft per reviewer feedback` });
+                }
                 synthesis = await this.synthesizer.synthesize(folder, ledger, token, review.feedback);
             }
+        }
+        if (progress && progressLabel) {
+            progress.report({ message: `${progressLabel} – Rendering markdown` });
         }
         const metadata = createMetadata(folder, ledger, synthesis.doc);
         const markdown = (0, docTemplate_1.renderDocumentation)(metadata, synthesis.doc);

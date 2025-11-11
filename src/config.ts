@@ -15,9 +15,12 @@ export async function loadConfig(workspaceRoot: vscode.Uri): Promise<DocGenConfi
   const maxChunkLines = config.get<number>('maxChunkLines') ?? 120;
   const signatureSampleLines = config.get<number>('signatureSampleLines') ?? 120;
 
+  const gitignorePatterns = await loadGitignorePatterns(workspaceRoot);
+
   return {
     workspaceRoot,
     ignoreGlobs,
+    gitignorePatterns,
     chunkSizeTokens,
     chunkOverlapTokens,
     tokenBudget,
@@ -27,4 +30,15 @@ export async function loadConfig(workspaceRoot: vscode.Uri): Promise<DocGenConfi
     maxChunkLines,
     signatureSampleLines
   } satisfies DocGenConfig;
+}
+
+async function loadGitignorePatterns(root: vscode.Uri): Promise<string[]> {
+  const gitignoreUri = vscode.Uri.joinPath(root, '.gitignore');
+  try {
+    const bytes = await vscode.workspace.fs.readFile(gitignoreUri);
+    const text = Buffer.from(bytes).toString('utf8');
+    return text.split(/\r?\n/);
+  } catch {
+    return [];
+  }
 }

@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.KeyMapper = void 0;
 const vscode = __importStar(require("vscode"));
 const fs_1 = require("../utils/fs");
+const logger_1 = require("../utils/logger");
 const STORAGE_DIR = '.nicespecs';
 const SQLITE_FILE = 'keymap.sqlite';
 const FALLBACK_FILE = 'keymap.json';
@@ -110,7 +111,7 @@ class KeyMapper {
                 return;
             }
             catch (error) {
-                console.warn('[nicespecs] Failed to initialize SQLite key mapper. Falling back to JSON store.', error);
+                (0, logger_1.logWarn)('[nicespecs] Failed to initialize SQLite key mapper. Falling back to JSON store.', error);
                 this.db = undefined;
             }
         }

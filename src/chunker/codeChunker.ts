@@ -1,6 +1,9 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocGenConfig, FolderNode, ChunkInfo } from '../types';
 import { throwIfCancelled } from '../utils/cancellation';
+import { isLikelyBinary } from '../utils/text';
+import { logDebug, logWarn } from '../utils/logger';
 
 const BLOCK_BOUNDARY_REGEX = /(class|interface|function|const|async|module)\b/i;
 const BRACE_OPEN = /{\s*$/;
@@ -9,15 +12,37 @@ const BRACE_CLOSE = /^\s*}/;
 export class CodeChunker {
   constructor(private readonly config: DocGenConfig) {}
 
-  async createChunks(folder: FolderNode, token: vscode.CancellationToken): Promise<ChunkInfo[]> {
+  async createChunks(
+    folder: FolderNode,
+    token: vscode.CancellationToken,
+    progress?: vscode.Progress<{ message?: string; increment?: number }>,
+    progressLabel?: string
+  ): Promise<ChunkInfo[]> {
+    logDebug(`Chunker: starting on ${folder.files.length} files for ${folder.name}`);
     const chunks: ChunkInfo[] = [];
+    const totalFiles = folder.files.length || 1;
 
-    for (const file of folder.files) {
+    for (let index = 0; index < folder.files.length; index += 1) {
+      const file = folder.files[index];
       throwIfCancelled(token);
-      const document = await vscode.workspace.openTextDocument(file);
+      if (progress && progressLabel) {
+        const fileName = path.basename(file.fsPath);
+        progress.report({ message: `${progressLabel} – Chunking ${fileName} (${index + 1}/${totalFiles})` });
+      }
+      let document: vscode.TextDocument;
+      try {
+        document = await vscode.workspace.openTextDocument(file);
+      } catch (error) {
+        logWarn(`Chunker: skipping ${file.fsPath} because it could not be opened.`, error);
+        continue;
+      }
       const text = document.getText();
+      if (isLikelyBinary(text)) {
+        logWarn(`Chunker: skipping ${file.fsPath} because it appears to be binary.`);
+        continue;
+      }
       if (Buffer.byteLength(text, 'utf8') > this.config.maxFileSizeBytes) {
-        console.warn(`Skipping ${file.fsPath} because it exceeds size limit.`);
+        logWarn(`Chunker: skipping ${file.fsPath} because it exceeds size limit of ${this.config.maxFileSizeBytes} bytes.`);
         continue;
       }
 
@@ -25,6 +50,7 @@ export class CodeChunker {
       chunks.push(...fileChunks);
     }
 
+    logDebug(`Chunker: produced ${chunks.length} chunks for ${folder.name}`);
     return chunks;
   }
 

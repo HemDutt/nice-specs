@@ -37,10 +37,12 @@ exports.TraversalPlanner = void 0;
 const vscode = __importStar(require("vscode"));
 const path_1 = require("../utils/path");
 const cancellation_1 = require("../utils/cancellation");
+const logger_1 = require("../utils/logger");
 const MAX_DEPTH = 50;
 class TraversalPlanner {
     constructor(config) {
         this.config = config;
+        this.gitignoreRules = (0, path_1.compileGitignore)(config.gitignorePatterns);
     }
     async build(root, token) {
         const queue = [
@@ -57,7 +59,7 @@ class TraversalPlanner {
             const entries = await vscode.workspace.fs.readDirectory(node.uri);
             for (const [name, type] of entries) {
                 const childUri = vscode.Uri.joinPath(node.uri, name);
-                if ((0, path_1.isIgnored)(childUri, this.config.workspaceRoot, this.config.ignoreGlobs)) {
+                if ((0, path_1.isIgnored)(childUri, this.config.workspaceRoot, this.config.ignoreGlobs, this.gitignoreRules)) {
                     continue;
                 }
                 if (type === vscode.FileType.Directory) {
@@ -87,7 +89,7 @@ class TraversalPlanner {
             return Math.max(current ?? 0, latest);
         }
         catch (error) {
-            console.warn('Failed to stat file for traversal planner', error);
+            (0, logger_1.logWarn)('TraversalPlanner: failed to stat file for traversal planner.', error);
             return current ?? Date.now();
         }
     }

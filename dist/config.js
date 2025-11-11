@@ -47,9 +47,11 @@ async function loadConfig(workspaceRoot) {
     const minChunkLines = config.get('minChunkLines') ?? 12;
     const maxChunkLines = config.get('maxChunkLines') ?? 120;
     const signatureSampleLines = config.get('signatureSampleLines') ?? 120;
+    const gitignorePatterns = await loadGitignorePatterns(workspaceRoot);
     return {
         workspaceRoot,
         ignoreGlobs,
+        gitignorePatterns,
         chunkSizeTokens,
         chunkOverlapTokens,
         tokenBudget,
@@ -59,5 +61,16 @@ async function loadConfig(workspaceRoot) {
         maxChunkLines,
         signatureSampleLines
     };
+}
+async function loadGitignorePatterns(root) {
+    const gitignoreUri = vscode.Uri.joinPath(root, '.gitignore');
+    try {
+        const bytes = await vscode.workspace.fs.readFile(gitignoreUri);
+        const text = Buffer.from(bytes).toString('utf8');
+        return text.split(/\r?\n/);
+    }
+    catch {
+        return [];
+    }
 }
 //# sourceMappingURL=config.js.map

@@ -28,7 +28,9 @@ export class AgentOrchestrator {
     chunks: ChunkInfo[],
     childSummaries: ChildSummary[],
     token: vscode.CancellationToken,
-    resumeState?: ComponentRunState
+    resumeState?: ComponentRunState,
+    progress?: vscode.Progress<{ message?: string; increment?: number }>,
+    progressLabel?: string
   ): Promise<ComponentLedger> {
     if (resumeState && resumeState.facts.length) {
       return {
@@ -42,8 +44,17 @@ export class AgentOrchestrator {
       } satisfies ComponentLedger;
     }
 
+    if (progress && progressLabel) {
+      progress.report({ message: `${progressLabel} – Planning documentation` });
+    }
     const plan = await this.planner.plan(folder, childSummaries, token);
-    const facts = await this.analyst.analyze(chunks, token);
+    if (progress && progressLabel) {
+      progress.report({ message: `${progressLabel} – Analyzing code` });
+    }
+    const facts = await this.analyst.analyze(chunks, token, progress, progressLabel);
+    if (progress && progressLabel) {
+      progress.report({ message: `${progressLabel} – Finalizing ledger` });
+    }
 
     return {
       componentId: componentIdFromUri(folder.uri, this.config.workspaceRoot),
@@ -60,18 +71,32 @@ export class AgentOrchestrator {
     folder: FolderNode,
     ledger: ComponentLedger,
     token: vscode.CancellationToken,
-    constraints?: string
+    constraints?: string,
+    progress?: vscode.Progress<{ message?: string; increment?: number }>,
+    progressLabel?: string
   ): Promise<DocDraft> {
+    if (progress && progressLabel) {
+      progress.report({ message: `${progressLabel} – Synthesizing documentation` });
+    }
     let synthesis = await this.synthesizer.synthesize(folder, ledger, token, constraints);
 
     if (this.config.reviewerEnabled) {
+      if (progress && progressLabel) {
+        progress.report({ message: `${progressLabel} – Reviewing draft` });
+      }
       const reviewMarkdown = renderDocumentation(createMetadata(folder, ledger, synthesis.doc), synthesis.doc);
       const review = await this.reviewer.review(reviewMarkdown, ledger, token);
       if (review.status === 'rework') {
+        if (progress && progressLabel) {
+          progress.report({ message: `${progressLabel} – Revising draft per reviewer feedback` });
+        }
         synthesis = await this.synthesizer.synthesize(folder, ledger, token, review.feedback);
       }
     }
 
+    if (progress && progressLabel) {
+      progress.report({ message: `${progressLabel} – Rendering markdown` });
+    }
     const metadata = createMetadata(folder, ledger, synthesis.doc);
     const markdown = renderDocumentation(metadata, synthesis.doc);
 

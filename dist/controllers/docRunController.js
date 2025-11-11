@@ -52,6 +52,7 @@ const path_1 = require("../utils/path");
 const rootComposer_1 = require("./rootComposer");
 const git_1 = require("../utils/git");
 const keyMapper_1 = require("../persist/keyMapper");
+const logger_1 = require("../utils/logger");
 class DocRunController {
     constructor(context) {
         this.context = context;
@@ -61,6 +62,7 @@ class DocRunController {
         if (!workspaceFolder) {
             throw new Error('Open a workspace folder before running documentation.');
         }
+        (0, logger_1.logInfo)('Doc run: loading configuration and stores');
         const config = await (0, config_1.loadConfig)(workspaceFolder.uri);
         const indexStore = new indexStore_1.IndexStore(workspaceFolder.uri);
         await indexStore.ensureReady();
@@ -86,12 +88,13 @@ class DocRunController {
                 }
             }
         }
+        (0, logger_1.logInfo)('Doc run: building traversal plan');
         const traversalPlanner = new traversalPlanner_1.TraversalPlanner(config);
         const folderGraph = await traversalPlanner.build(workspaceFolder.uri, options.token);
         const signatureScanner = new signatureScanner_1.SignatureScanner(config);
         const changeDetector = new changeDetector_1.ChangeDetector(indexStore, config.workspaceRoot, signatureScanner);
         const candidateFolders = await changeDetector.selectTargets(folderGraph, options.token, options.force);
-        candidateFolders.sort((a, b) => a.node.depth - b.node.depth);
+        candidateFolders.sort((a, b) => b.node.depth - a.node.depth);
         if (candidateFolders.length === 0) {
             return {
                 processed: 0,
@@ -100,6 +103,7 @@ class DocRunController {
                 message: 'Documentation already up to date.'
             };
         }
+        (0, logger_1.logInfo)(`Doc run: ${candidateFolders.length} candidate components identified`);
         const costEstimator = new costEstimator_1.CostEstimator(config);
         const estimatedTokens = costEstimator.estimateCost(candidateFolders);
         if (options.requireApproval) {
@@ -122,17 +126,35 @@ class DocRunController {
         const docChunker = new docChunker_1.DocChunker();
         const docWriter = new docWriter_1.DocWriter(indexStore, embeddingStore, keyMapper);
         const evaluator = new docEvaluator_1.DocEvaluator();
+        const totalTargets = candidateFolders.length;
+        const progressIncrement = totalTargets > 0 ? 100 / totalTargets : 0;
         let processed = 0;
         let actualTokens = 0;
+        const runStart = Date.now();
+        (0, logger_1.logInfo)(`Doc run: starting processing of ${totalTargets} components`);
         for (const target of candidateFolders) {
             const folder = target.node;
             (0, cancellation_1.throwIfCancelled)(options.token);
-            options.progress?.report({ message: `Documenting ${folder.name}` });
+            const componentLabel = `Documenting ${folder.name} (${processed + 1}/${totalTargets})`;
+            (0, logger_1.logInfo)(`${componentLabel}: starting (files=${folder.files.length}, depth=${folder.depth})`);
+            options.progress?.report({
+                message: `${componentLabel} – Starting`,
+                increment: progressIncrement
+            });
             const componentId = (0, path_1.componentIdFromUri)(folder.uri, config.workspaceRoot);
             const existingState = await indexStore.loadRunState(componentId);
-            const chunks = await chunker.createChunks(folder, options.token);
+            options.progress?.report({ message: `${componentLabel} – Chunking source files` });
+            const chunkStart = Date.now();
+            const chunks = await chunker.createChunks(folder, options.token, options.progress, componentLabel);
+            (0, logger_1.logDebug)(`${componentLabel}: chunked ${folder.files.length} files into ${chunks.length} chunks in ${Date.now() - chunkStart}ms`);
+            options.progress?.report({ message: `${componentLabel} – Gathering child summaries` });
+            const childStart = Date.now();
             const childSummaries = await docChunker.loadChildSummaries(folder);
-            const ledger = await agent.prepareLedger(folder, chunks, childSummaries, options.token, existingState);
+            (0, logger_1.logDebug)(`${componentLabel}: loaded ${childSummaries.length} child summaries in ${Date.now() - childStart}ms`);
+            options.progress?.report({ message: `${componentLabel} – Preparing ledger` });
+            const ledgerStart = Date.now();
+            const ledger = await agent.prepareLedger(folder, chunks, childSummaries, options.token, existingState, options.progress, componentLabel);
+            (0, logger_1.logDebug)(`${componentLabel}: prepared ledger with ${ledger.facts.length} facts in ${Date.now() - ledgerStart}ms`);
             await indexStore.saveRunState({
                 componentId,
                 folderPath: ledger.folderPath,
@@ -148,12 +170,18 @@ class DocRunController {
                 constraints: existingState?.constraints,
                 plan: ledger.plan
             });
-            const draft = await agent.generateDraft(folder, ledger, options.token, existingState?.constraints);
+            options.progress?.report({ message: `${componentLabel} – Generating draft` });
+            const draftStart = Date.now();
+            const draft = await agent.generateDraft(folder, ledger, options.token, existingState?.constraints, options.progress, componentLabel);
+            (0, logger_1.logDebug)(`${componentLabel}: draft generated (~${draft.estimatedTokens} tokens) in ${Date.now() - draftStart}ms`);
             evaluator.validateDraft(draft);
+            options.progress?.report({ message: `${componentLabel} – Writing documentation` });
             await docWriter.write(folder, draft, target.signature);
+            (0, logger_1.logInfo)(`${componentLabel}: documentation written to ${(0, path_1.docFileForFolder)(folder.uri).fsPath}`);
             actualTokens += draft.estimatedTokens;
             processed += 1;
         }
+        options.progress?.report({ message: 'Finalizing documentation run' });
         const rootComposer = new rootComposer_1.RootComposer(workspaceFolder.uri, indexStore);
         await rootComposer.compose();
         await indexStore.finalizeRun();
@@ -161,6 +189,7 @@ class DocRunController {
         if (latestCommit) {
             await indexStore.setLastCommit(latestCommit);
         }
+        (0, logger_1.logInfo)(`Doc run: completed ${processed}/${totalTargets} components in ${Date.now() - runStart}ms`);
         return {
             processed,
             skipped: folderGraph.length - processed,

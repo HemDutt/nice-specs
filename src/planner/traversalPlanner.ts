@@ -1,12 +1,17 @@
 import * as vscode from 'vscode';
 import { DocGenConfig, FolderNode } from '../types';
-import { isIgnored } from '../utils/path';
+import { compileGitignore, isIgnored, type GitignoreRule } from '../utils/path';
 import { throwIfCancelled } from '../utils/cancellation';
+import { logWarn } from '../utils/logger';
 
 const MAX_DEPTH = 50;
 
 export class TraversalPlanner {
-  constructor(private readonly config: DocGenConfig) {}
+  private readonly gitignoreRules: GitignoreRule[];
+
+  constructor(private readonly config: DocGenConfig) {
+    this.gitignoreRules = compileGitignore(config.gitignorePatterns);
+  }
 
   async build(root: vscode.Uri, token: vscode.CancellationToken): Promise<FolderNode[]> {
     const queue: FolderNode[] = [
@@ -26,7 +31,7 @@ export class TraversalPlanner {
       const entries = await vscode.workspace.fs.readDirectory(node.uri);
       for (const [name, type] of entries) {
         const childUri = vscode.Uri.joinPath(node.uri, name);
-        if (isIgnored(childUri, this.config.workspaceRoot, this.config.ignoreGlobs)) {
+        if (isIgnored(childUri, this.config.workspaceRoot, this.config.ignoreGlobs, this.gitignoreRules)) {
           continue;
         }
 
@@ -57,7 +62,7 @@ export class TraversalPlanner {
       const latest = stat.mtime;
       return Math.max(current ?? 0, latest);
     } catch (error) {
-      console.warn('Failed to stat file for traversal planner', error);
+      logWarn('TraversalPlanner: failed to stat file for traversal planner.', error);
       return current ?? Date.now();
     }
   }

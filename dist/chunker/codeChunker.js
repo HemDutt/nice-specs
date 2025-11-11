@@ -34,8 +34,11 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CodeChunker = void 0;
+const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
 const cancellation_1 = require("../utils/cancellation");
+const text_1 = require("../utils/text");
+const logger_1 = require("../utils/logger");
 const BLOCK_BOUNDARY_REGEX = /(class|interface|function|const|async|module)\b/i;
 const BRACE_OPEN = /{\s*$/;
 const BRACE_CLOSE = /^\s*}/;
@@ -43,19 +46,38 @@ class CodeChunker {
     constructor(config) {
         this.config = config;
     }
-    async createChunks(folder, token) {
+    async createChunks(folder, token, progress, progressLabel) {
+        (0, logger_1.logDebug)(`Chunker: starting on ${folder.files.length} files for ${folder.name}`);
         const chunks = [];
-        for (const file of folder.files) {
+        const totalFiles = folder.files.length || 1;
+        for (let index = 0; index < folder.files.length; index += 1) {
+            const file = folder.files[index];
             (0, cancellation_1.throwIfCancelled)(token);
-            const document = await vscode.workspace.openTextDocument(file);
+            if (progress && progressLabel) {
+                const fileName = path.basename(file.fsPath);
+                progress.report({ message: `${progressLabel} – Chunking ${fileName} (${index + 1}/${totalFiles})` });
+            }
+            let document;
+            try {
+                document = await vscode.workspace.openTextDocument(file);
+            }
+            catch (error) {
+                (0, logger_1.logWarn)(`Chunker: skipping ${file.fsPath} because it could not be opened.`, error);
+                continue;
+            }
             const text = document.getText();
+            if ((0, text_1.isLikelyBinary)(text)) {
+                (0, logger_1.logWarn)(`Chunker: skipping ${file.fsPath} because it appears to be binary.`);
+                continue;
+            }
             if (Buffer.byteLength(text, 'utf8') > this.config.maxFileSizeBytes) {
-                console.warn(`Skipping ${file.fsPath} because it exceeds size limit.`);
+                (0, logger_1.logWarn)(`Chunker: skipping ${file.fsPath} because it exceeds size limit of ${this.config.maxFileSizeBytes} bytes.`);
                 continue;
             }
             const fileChunks = this.chunkDocument(document, text);
             chunks.push(...fileChunks);
         }
+        (0, logger_1.logDebug)(`Chunker: produced ${chunks.length} chunks for ${folder.name}`);
         return chunks;
     }
     chunkDocument(document, text) {

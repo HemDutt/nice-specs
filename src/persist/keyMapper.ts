@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SymbolIndexRecord } from '../types';
 import { readFileText, writeFileText } from '../utils/fs';
+import { logWarn } from '../utils/logger';
 
 type SqliteModule = typeof import('node:sqlite');
 type SqliteDatabase = import('node:sqlite').DatabaseSync;
@@ -95,7 +96,7 @@ export class KeyMapper {
         `);
         return;
       } catch (error) {
-        console.warn('[nicespecs] Failed to initialize SQLite key mapper. Falling back to JSON store.', error);
+        logWarn('[nicespecs] Failed to initialize SQLite key mapper. Falling back to JSON store.', error);
         this.db = undefined;
       }
     }

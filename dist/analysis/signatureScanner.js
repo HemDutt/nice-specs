@@ -36,6 +36,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SignatureScanner = void 0;
 const vscode = __importStar(require("vscode"));
 const hash_1 = require("../utils/hash");
+const text_1 = require("../utils/text");
+const logger_1 = require("../utils/logger");
 const SYMBOL_REGEX = /\b(class|interface|function|const|let|var)\s+([A-Za-z0-9_]+)/g;
 const IMPORT_REGEX = /import\s+(?:.+?from\s+)?['"]([^'"]+)['"]/g;
 class SignatureScanner {
@@ -45,8 +47,20 @@ class SignatureScanner {
     async computeSignature(folder) {
         const parts = [];
         for (const file of folder.files) {
-            const document = await vscode.workspace.openTextDocument(file);
-            const lines = document.getText().split(/\r?\n/).slice(0, this.config.signatureSampleLines);
+            let document;
+            try {
+                document = await vscode.workspace.openTextDocument(file);
+            }
+            catch (error) {
+                (0, logger_1.logWarn)(`SignatureScanner: skipping ${file.fsPath} because it could not be opened.`, error);
+                continue;
+            }
+            const text = document.getText();
+            if ((0, text_1.isLikelyBinary)(text)) {
+                (0, logger_1.logWarn)(`SignatureScanner: skipping ${file.fsPath} because it appears to be binary.`);
+                continue;
+            }
+            const lines = text.split(/\r?\n/).slice(0, this.config.signatureSampleLines);
             const snippet = lines.join('\n');
             parts.push(`${file.path}:${extractSymbols(snippet)}`);
             parts.push(`${file.path}:imports:${extractImports(snippet)}`);

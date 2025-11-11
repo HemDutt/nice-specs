@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ChunkInfo, LedgerFact } from '../../types';
 import { workspaceRelativePath } from '../../utils/path';
+import { logDebug, logWarn } from '../../utils/logger';
 import { PersonaClient, safeJsonParse } from '../personaClient';
 
 const DEFAULT_ANALYST_BATCH_SIZE = 4;
@@ -9,15 +10,37 @@ const MAX_CHUNK_CHARS = 1600;
 export class CodeAnalysisAgent {
   constructor(private readonly persona: PersonaClient, private readonly batchSize = DEFAULT_ANALYST_BATCH_SIZE) {}
 
-  async analyze(chunks: ChunkInfo[], token: vscode.CancellationToken): Promise<LedgerFact[]> {
+  async analyze(
+    chunks: ChunkInfo[],
+    token: vscode.CancellationToken,
+    progress?: vscode.Progress<{ message?: string; increment?: number }>,
+    progressLabel?: string
+  ): Promise<LedgerFact[]> {
     const facts: LedgerFact[] = [];
+    if (!chunks.length) {
+      return facts;
+    }
+    const totalBatches = Math.ceil(chunks.length / this.batchSize);
 
     for (let i = 0; i < chunks.length; i += this.batchSize) {
+      const batchIndex = i / this.batchSize;
       const batch = chunks.slice(i, i + this.batchSize);
+      if (progress && progressLabel) {
+        const fileList = batch
+          .map((chunk) => workspaceRelativePath(chunk.file))
+          .filter(Boolean)
+          .slice(0, 2)
+          .join(', ');
+        const fileHint = fileList ? ` – ${fileList}${batch.length > 2 ? ', …' : ''}` : '';
+        progress.report({ message: `${progressLabel} – Analyzing code (${batchIndex + 1}/${totalBatches})${fileHint}` });
+      }
+      const batchStart = Date.now();
+      logDebug(`CodeAnalysis: starting batch ${batchIndex + 1}/${totalBatches} (${batch.length} chunks)`); 
       const prompt = this.buildPrompt(batch);
       const response = await this.persona.invoke('CodeAnalyst', prompt, token, 'Analyze code chunks for documentation');
       const json = safeJsonParse<Record<string, AnalystChunkSummary>>(response);
       if (!json) {
+        logWarn(`CodeAnalysis: received invalid JSON for batch ${batchIndex + 1}/${totalBatches}`);
         continue;
       }
 
@@ -38,6 +61,8 @@ export class CodeAnalysisAgent {
           analysis: summary.analysis
         });
       }
+
+      logDebug(`CodeAnalysis: finished batch ${batchIndex + 1}/${totalBatches} in ${Date.now() - batchStart}ms (facts so far: ${facts.length})`);
     }
 
     return facts;

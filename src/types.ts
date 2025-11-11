@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 export interface DocGenConfig {
   workspaceRoot: vscode.Uri;
   ignoreGlobs: string[];
+  gitignorePatterns: string[];
   chunkSizeTokens: number;
   chunkOverlapTokens: number;
   tokenBudget: number;
