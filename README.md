@@ -38,7 +38,7 @@ Once VS Code opens, hit `F5` to start the development host. Focus the chat view 
 Type a prompt such as:
 
 ```
-@nicespecs /docgen refresh the workspace docs
+@nicespecs create the workspace docs
 ```
 
 The participant streams progress, token estimates, and completion summaries back into the conversation.
